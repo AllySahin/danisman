@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "Mükerrem Şahin | Danışman Paneli",
+  "short_name": "Danışman",
+  "description": "Danışan, seans ve kazanç takibi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fcf8f9",
+  "theme_color": "#83596d",
+  "icons": [
+    {
+      "src": "./app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

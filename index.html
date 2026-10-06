@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#83596d" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>Danışman Paneli</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./app-icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./app-icon.svg" />
+    <link rel="stylesheet" href="styles.css?v=6" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <div class="phone-screen">
+        <div class="screen active" data-screen="today">
+          <header class="profile-header">
+            <div class="avatar green" aria-hidden="true">
+              <svg viewBox="0 0 48 48" focusable="false">
+                <path d="M24 38V23" />
+                <path d="M24 28c-8 0-13-5-13-13 8 0 13 5 13 13Z" />
+                <path d="M24 24c0-9 5-14 14-14 0 9-5 14-14 14Z" />
+                <path d="M18 38h12" />
+              </svg>
+            </div>
+            <div>
+              <h2>Mükerrem ŞAHİN</h2>
+              <p>Danışman Paneli</p>
+            </div>
+          </header>
+
+          <h1 class="page-title">Bugün</h1>
+          <p class="subtext" id="todayDate"></p>
+
+          <section class="panel-box">
+            <div class="section-header">
+              <h3>Günün seansları</h3>
+              <span class="count-badge" id="todaySessionCount">0</span>
+              <button class="add-session-btn" id="todayAddSessionButton" type="button">+ Seans</button>
+            </div>
+            <div id="todaySessionList"></div>
+          </section>
+        </div>
+
+        <div class="screen" data-screen="clients">
+          <header class="profile-header">
+            <div class="avatar green" aria-hidden="true">
+              <svg viewBox="0 0 48 48" focusable="false">
+                <path d="M24 38V23" />
+                <path d="M24 28c-8 0-13-5-13-13 8 0 13 5 13 13Z" />
+                <path d="M24 24c0-9 5-14 14-14 0 9-5 14-14 14Z" />
+                <path d="M18 38h12" />
+              </svg>
+            </div>
+            <div>
+              <h2>Mükerrem ŞAHİN</h2>
+              <p>Danışman Paneli</p>
+            </div>
+          </header>
+
+          <h1 class="page-title">Danışanlar</h1>
+          <p class="subtext">Danışan kayıtları ve seans bilgileri.</p>
+
+          <section class="panel-box">
+            <div class="section-header">
+              <h3>Danışan listesi</h3>
+              <span class="count-badge" id="clientCount">0</span>
+              <button class="add-session-btn" id="addClientButton" type="button">+ Danışan</button>
+            </div>
+            <div id="clientList"></div>
+          </section>
+        </div>
+
+        <div class="screen" data-screen="sessions">
+          <header class="profile-header">
+            <div class="avatar green" aria-hidden="true">
+              <svg viewBox="0 0 48 48" focusable="false">
+                <path d="M24 38V23" />
+                <path d="M24 28c-8 0-13-5-13-13 8 0 13 5 13 13Z" />
+                <path d="M24 24c0-9 5-14 14-14 0 9-5 14-14 14Z" />
+                <path d="M18 38h12" />
+              </svg>
+            </div>
+            <div>
+              <h2>Mükerrem ŞAHİN</h2>
+              <p>Danışman Paneli</p>
+            </div>
+          </header>
+
+          <h1 class="page-title">Takvim</h1>
+          <p class="subtext">Seansları aya ve güne göre görüntüleyin.</p>
+
+          <section class="panel-box calendar-panel">
+            <div class="calendar-toolbar">
+              <button class="calendar-nav-btn" id="previousMonth" type="button" aria-label="Önceki ay" title="Önceki ay">‹</button>
+              <h2 id="calendarMonthTitle"></h2>
+              <button class="calendar-nav-btn" id="nextMonth" type="button" aria-label="Sonraki ay" title="Sonraki ay">›</button>
+              <button class="calendar-today-btn" id="calendarToday" type="button">Bugün</button>
+              <button class="add-session-btn" id="addSessionButton" type="button">+ Seans</button>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>Pzt</span><span>Sal</span><span>Çar</span><span>Per</span><span>Cum</span><span>Cmt</span><span>Paz</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid" role="group" aria-label="Aylık takvim"></div>
+
+            <div class="calendar-day-details">
+              <div class="section-header">
+                <h3 id="selectedCalendarDate"></h3>
+                <span class="count-badge" id="sessionCount">0</span>
+              </div>
+              <div id="sessionList"></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="screen" data-screen="new-session">
+          <header class="profile-header">
+            <div class="avatar green" aria-hidden="true">
+              <svg viewBox="0 0 48 48" focusable="false">
+                <path d="M24 38V23" />
+                <path d="M24 28c-8 0-13-5-13-13 8 0 13 5 13 13Z" />
+                <path d="M24 24c0-9 5-14 14-14 0 9-5 14-14 14Z" />
+                <path d="M18 38h12" />
+              </svg>
+            </div>
+            <div>
+              <h2>Mükerrem ŞAHİN</h2>
+              <p>Danışman Paneli</p>
+            </div>
+          </header>
+
+          <h1 class="page-title form-title" id="entryTitle">Danışan ekle</h1>
+          <p class="subtext form-subtext" id="entryDescription">Önce danışanı kaydedin. Sistem ilk seans tarihine göre aynı gün/saatte haftalık seansları otomatik oluşturur.</p>
+
+          <div class="form-switch" role="group" aria-label="Ekleme türü">
+            <button class="filter-btn active" data-form-mode="client" type="button">Danışan</button>
+            <button class="filter-btn" data-form-mode="session" type="button">Seans</button>
+          </div>
+
+          <form id="clientForm" class="new-session-form form-panel active">
+            <label class="field-label">
+              <span>DANIŞAN ADI</span>
+              <input class="input-box" id="clientName" name="clientName" type="text" placeholder="Örn. Ayşe Yılmaz" required />
+            </label>
+
+            <label class="field-label">
+              <span>GÖRÜŞME TİPİ</span>
+              <select class="input-box" id="clientMode" name="clientMode">
+                <option value="online">Online</option>
+                <option value="faceToFace">Yüz yüze</option>
+              </select>
+            </label>
+
+            <label class="field-label">
+              <span>İLK SEANS TARİHİ</span>
+              <input class="input-box" id="firstSessionDate" name="firstSessionDate" type="date" required />
+            </label>
+
+            <label class="field-label">
+              <span>İLK SEANS SAATİ</span>
+              <input class="input-box" id="firstSessionTime" name="firstSessionTime" type="time" required />
+            </label>
+
+            <label class="field-label">
+              <span>ÜCRET</span>
+              <input class="input-box" id="clientFee" name="clientFee" type="number" min="0" step="0.01" placeholder="1500" required />
+            </label>
+
+            <label class="field-label">
+              <span>ÖNEMLİ NOT</span>
+              <textarea id="clientNote" name="clientNote" rows="4" placeholder="Kaygı seviyesi yüksek, düzeni izlenmeli..."></textarea>
+            </label>
+
+            <button type="submit" class="save-btn">+ Danışan ekle</button>
+          </form>
+
+          <form id="sessionForm" class="new-session-form form-panel">
+            <label class="field-label">
+              <span>DANIŞAN</span>
+              <select class="input-box" id="sessionClient" name="sessionClient" required></select>
+            </label>
+
+            <label class="field-label">
+              <span>SEANS TARİHİ</span>
+              <input class="input-box" id="sessionDate" name="sessionDate" type="date" required />
+            </label>
+
+            <label class="field-label">
+              <span>SAAT</span>
+              <input class="input-box" id="sessionTime" name="sessionTime" type="time" required />
+            </label>
+
+            <label class="field-label">
+              <span>GÖRÜŞME TİPİ</span>
+              <select class="input-box" id="sessionMode" name="sessionMode">
+                <option value="online">Online</option>
+                <option value="faceToFace">Yüz yüze</option>
+              </select>
+            </label>
+
+            <button type="submit" class="save-btn">+ Seansı planla</button>
+          </form>
+        </div>
+
+        <div class="screen" data-screen="income">
+          <header class="profile-header">
+            <div class="avatar green" aria-hidden="true">
+              <svg viewBox="0 0 48 48" focusable="false">
+                <path d="M24 38V23" />
+                <path d="M24 28c-8 0-13-5-13-13 8 0 13 5 13 13Z" />
+                <path d="M24 24c0-9 5-14 14-14 0 9-5 14-14 14Z" />
+                <path d="M18 38h12" />
+              </svg>
+            </div>
+            <div>
+              <h2>Mükerrem ŞAHİN</h2>
+              <p>Danışman Paneli</p>
+            </div>
+          </header>
+
+          <h1 class="page-title">Gelirler</h1>
+          <p class="subtext">Seanslara göre tahsil edilen ve bekleyen tutarları takip edin.</p>
+
+          <section class="panel-box income-box">
+            <div class="income-header">
+              <div>
+                <h3>Bu ay tahsil edilen</h3>
+                <small>Ekim 2026</small>
+              </div>
+            </div>
+
+            <div class="amount-line" id="monthlyIncome">₺0</div>
+            <p class="income-caption">Komisyon yalnızca tahsil edilen yüz yüze seanslardan hesaplanır.</p>
+            <div class="finance-breakdown">
+              <div class="finance-row">
+                <span>Ofis komisyonu (%30)</span>
+                <strong id="officeCommission">₺0</strong>
+              </div>
+              <div class="finance-row net-row">
+                <span>Komisyon sonrası net</span>
+                <strong id="netIncome">₺0</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel-box collection-box">
+            <div class="collection-header">
+              <h3>Tahsilat durumu</h3>
+              <span class="period">Bu ay</span>
+            </div>
+
+            <div class="donut-row">
+              <div class="donut-wrap">
+                <div class="donut" id="collectionDonut">
+                  <span id="collectionRate">%0</span>
+                  <small>tahsil</small>
+                </div>
+              </div>
+
+              <div class="legend">
+                <div class="legend-row"><span class="dot green"></span><strong>Ödendi</strong><em id="paidTotal">₺0</em></div>
+                <div class="legend-row"><span class="dot light"></span><strong>Ödenmedi</strong><em id="unpaidTotal">₺0</em></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel-box monthly-breakdown-box">
+            <div class="collection-header">
+              <h3>Aylık kazanç dökümü</h3>
+              <div class="year-navigation" aria-label="Yıl seçimi">
+                <button class="calendar-nav-btn" id="previousFinanceYear" type="button" aria-label="Önceki yıl" title="Önceki yıl">‹</button>
+                <strong id="financeYear"></strong>
+                <button class="calendar-nav-btn" id="nextFinanceYear" type="button" aria-label="Sonraki yıl" title="Sonraki yıl">›</button>
+              </div>
+            </div>
+            <div class="monthly-breakdown-labels" aria-hidden="true">
+              <span>Ay</span><span>Tahsil</span><span>Ofis</span><span>Net</span>
+            </div>
+            <div id="monthlyBreakdown"></div>
+          </section>
+        </div>
+
+        <nav class="bottom-nav" aria-label="Ana menü">
+          <button class="nav-item active" data-target="today" type="button" aria-label="Bugün" title="Bugün">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9" /><path d="M9 20v-6h6v6" /></svg>
+          </button>
+          <button class="nav-item" data-target="clients" type="button" aria-label="Danışanlar" title="Danışanlar">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3.5 20v-1.5a5.5 5.5 0 0 1 11 0V20" /><path d="M16 5.5a3 3 0 0 1 0 5.8M18 14a4.5 4.5 0 0 1 2.5 4v2" /></svg>
+          </button>
+          <button class="nav-item" data-target="sessions" type="button" aria-label="Takvim" title="Takvim">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M7 3v4M17 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01" /></svg>
+          </button>
+          <button class="nav-item" data-target="income" type="button" aria-label="Finans" title="Finans">
+            <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2.5" /><path d="M3 9h18M16 14h2M7 5V3h10v2" /></svg>
+          </button>
+        </nav>
+
+        <dialog class="session-dialog" id="sessionDialog" aria-labelledby="sessionDialogTitle">
+          <div class="dialog-header">
+            <div>
+              <span class="dialog-eyebrow">SEANS DETAYI</span>
+              <h2 id="sessionDialogTitle"></h2>
+              <p id="sessionDialogMeta"></p>
+            </div>
+            <button class="dialog-close" id="closeSessionDialog" type="button" aria-label="Pencereyi kapat">×</button>
+          </div>
+
+          <div class="dialog-summary">
+            <span class="tag" id="sessionDialogStatus"></span>
+            <strong id="sessionDialogFee"></strong>
+          </div>
+
+          <label class="field-label dialog-note-label" for="sessionNote">
+            <span>SEANS NOTU</span>
+            <textarea id="sessionNote" rows="4" placeholder="Bu görüşmeye ait kısa not..."></textarea>
+          </label>
+
+          <div class="dialog-payment-row">
+            <div>
+              <strong>Ödeme durumu</strong>
+              <small>Değişiklikler kaydettiğinizde uygulanır.</small>
+            </div>
+            <button class="payment-toggle" id="sessionDialogPayment" type="button" aria-pressed="false"></button>
+          </div>
+
+          <div class="reschedule-history" id="sessionRescheduleHistory" hidden></div>
+
+          <div class="reschedule-panel" id="reschedulePanel" hidden>
+            <label class="field-label">
+              <span>YENİ TARİH</span>
+              <input class="input-box" id="rescheduleDate" type="date" />
+            </label>
+            <label class="field-label">
+              <span>YENİ SAAT</span>
+              <input class="input-box" id="rescheduleTime" type="time" />
+            </label>
+            <div class="reschedule-actions">
+              <button class="dialog-secondary-btn" id="cancelReschedule" type="button">Vazgeç</button>
+              <button class="save-btn" id="saveReschedule" type="button">Yeni zamanı kaydet</button>
+            </div>
+          </div>
+
+          <div class="dialog-actions">
+            <button class="dialog-secondary-btn" id="rescheduleSessionButton" type="button">Seansı ertele</button>
+            <button class="session-action-btn cancel-session" id="cancelSessionFromDialog" type="button">Seansı iptal et</button>
+            <div class="dialog-save-actions">
+              <button class="dialog-secondary-btn" id="saveSessionDetails" type="button">Değişiklikleri kaydet</button>
+              <button class="dialog-complete-btn" id="completeSessionFromDialog" type="button">Seansı tamamla</button>
+            </div>
+          </div>
+        </dialog>
+      </div>
+    </div>
+
+    <script src="app.js?v=7"></script>
+  </body>
+</html>
