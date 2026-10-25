@@ -4,6 +4,8 @@ Psikolojik danışmanlar için danışan, seans, ödeme ve aylık kazanç takibi
 
 ## Özellikler
 - Danışan ekleme
+- Seans oluşturmadan danışan kaydetme
+- Seansları sonradan ayrıca planlama
 - Online / 100 Yüze kategorisi takibi
 - Seans tarihi ve ücret kaydı
 - Ödendi / Ödenmedi durumu

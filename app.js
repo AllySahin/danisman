@@ -118,7 +118,7 @@ function saveState() {
   });
 }
 
-function createClientAndRecurringSessions(data) {
+function createClient(data) {
   const client = {
     id: crypto.randomUUID(),
     name: data.name.trim(),
@@ -128,28 +128,7 @@ function createClientAndRecurringSessions(data) {
     createdAt: new Date().toISOString().slice(0, 10)
   };
 
-  const startDate = data.firstSessionDate;
-  const startTime = data.firstSessionTime;
-  const sessions = [];
-
-  for (let i = 0; i < 8; i += 1) {
-    const date = new Date(`${startDate}T${startTime}:00`);
-    date.setDate(date.getDate() + i * 7);
-
-    sessions.push({
-      id: crypto.randomUUID(),
-      clientId: client.id,
-      date: toISODate(date),
-      time: startTime,
-      status: 'upcoming',
-      mode: client.mode,
-      fee: client.fee,
-      paymentStatus: 'unpaid'
-    });
-  }
-
   state.clients.unshift(client);
-  state.sessions = [...sessions, ...state.sessions];
   saveState();
   render();
   activateScreen('clients');
@@ -385,7 +364,7 @@ function setFormMode(mode) {
   sessionForm.classList.toggle('active', mode === 'session');
   document.querySelector('#entryTitle').textContent = isClientMode ? 'Danışan ekle' : 'Seans ekle';
   document.querySelector('#entryDescription').textContent = isClientMode
-    ? 'Önce danışanı kaydedin. Sistem ilk seans tarihine göre aynı gün/saatte haftalık seansları otomatik oluşturur.'
+    ? 'Danışan bilgilerini kaydedin. Seansları daha sonra ayrıca planlayabilirsiniz.'
     : 'Danışanı seçip tarih ve saat belirleyerek yeni seansı planlayın.';
   if (mode === 'session') renderSessionClientOptions();
 }
@@ -720,18 +699,16 @@ clientForm.addEventListener('submit', (event) => {
   const data = {
     name: document.querySelector('#clientName').value,
     mode: document.querySelector('#clientMode').value,
-    firstSessionDate: document.querySelector('#firstSessionDate').value,
-    firstSessionTime: document.querySelector('#firstSessionTime').value,
     fee: document.querySelector('#clientFee').value,
     note: document.querySelector('#clientNote').value
   };
 
-  if (!data.name || !data.firstSessionDate || !data.firstSessionTime || !data.fee) {
-    alert('Lütfen danışan adı, ilk seans tarihi, saat ve ücret alanlarını doldurun.');
+  if (!data.name.trim() || !data.fee) {
+    alert('Lütfen danışan adı ve ücret alanlarını doldurun.');
     return;
   }
 
-  createClientAndRecurringSessions(data);
+  createClient(data);
   clientForm.reset();
 });
 
