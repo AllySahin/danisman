@@ -10,11 +10,45 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./app-icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./app-icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=6" />
+    <link rel="stylesheet" href="styles.css?v=9" />
   </head>
   <body>
-    <div class="app-shell">
+    <main class="login-screen" id="loginScreen">
+      <section class="login-card">
+        <div class="avatar green" aria-hidden="true">
+          <svg viewBox="0 0 48 48" focusable="false">
+            <path d="M24 38V23" />
+            <path d="M24 28c-8 0-13-5-13-13 8 0 13 5 13 13Z" />
+            <path d="M24 24c0-9 5-14 14-14 0 9-5 14-14 14Z" />
+            <path d="M18 38h12" />
+          </svg>
+        </div>
+        <h1>Danışman Paneli</h1>
+        <p>Bulut verilerinize erişmek için giriş yapın.</p>
+        <form id="loginForm" class="login-form">
+          <label class="field-label" for="loginUsername">
+            <span>KULLANICI ADI</span>
+            <input class="input-box" id="loginUsername" name="username" type="text" autocomplete="username" required />
+          </label>
+          <label class="field-label" for="loginPassword">
+            <span>ŞİFRE</span>
+            <input class="input-box" id="loginPassword" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <p class="login-error" id="loginError" role="alert" hidden></p>
+          <button class="save-btn" id="loginButton" type="submit">Giriş yap</button>
+        </form>
+      </section>
+    </main>
+
+    <div class="app-shell" id="appShell" hidden>
       <div class="phone-screen">
+        <section class="sync-conflict" id="syncConflictPanel" hidden aria-live="polite">
+          <strong>Bulut ve bu cihazdaki kayıtlar farklı</strong>
+          <p>Hiçbir kopya silinmedi. Hangi kopyayı kullanacağınızı seçin.</p>
+          <button id="keepLocalCopyButton" type="button">Bu cihazdaki yedeği buluta yaz</button>
+          <button id="useCloudCopyButton" type="button">Bulut verisini bu cihaza yükle</button>
+        </section>
+
         <div class="screen active" data-screen="today">
           <header class="profile-header">
             <div class="avatar green" aria-hidden="true">
@@ -70,6 +104,26 @@
               <button class="add-session-btn" id="addClientButton" type="button">+ Danışan</button>
             </div>
             <div id="clientList"></div>
+          </section>
+        </div>
+
+        <div class="screen" data-screen="client-detail">
+          <button class="dialog-secondary-btn client-back-btn" id="backToClients" type="button">‹ Danışanlara dön</button>
+          <h1 class="page-title" id="clientDetailTitle"></h1>
+          <p class="subtext" id="clientDetailSubtitle"></p>
+
+          <section class="client-detail-stats" id="clientDetailStats" aria-label="Danışan istatistikleri"></section>
+
+          <section class="panel-box client-note-box">
+            <h2>Danışan notu</h2>
+            <p id="clientDetailNote"></p>
+          </section>
+
+          <section class="panel-box client-history-box">
+            <div class="section-header">
+              <h2>Seans geçmişi ve planlananlar</h2>
+            </div>
+            <div id="clientSessionHistory"></div>
           </section>
         </div>
 
@@ -132,7 +186,7 @@
           </header>
 
           <h1 class="page-title form-title" id="entryTitle">Danışan ekle</h1>
-          <p class="subtext form-subtext" id="entryDescription">Danışan bilgilerini kaydedin. Seansları daha sonra ayrıca planlayabilirsiniz.</p>
+          <p class="subtext form-subtext" id="entryDescription">Danışan kaydı için seans tarihi ve saati gerekmez; seansları daha sonra ayrıca planlayabilirsiniz.</p>
 
           <div class="form-switch" role="group" aria-label="Ekleme türü">
             <button class="filter-btn active" data-form-mode="client" type="button">Danışan</button>
@@ -286,6 +340,11 @@
             <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="2.5" /><path d="M3 9h18M16 14h2M7 5V3h10v2" /></svg>
           </button>
         </nav>
+        <div class="sync-toolbar">
+          <span id="syncStatus" role="status">Bulut bağlantısı bekleniyor</span>
+          <button id="refreshCloudButton" type="button">Eşitle</button>
+          <button id="logoutButton" type="button">Çıkış</button>
+        </div>
 
         <dialog class="session-dialog" id="sessionDialog" aria-labelledby="sessionDialogTitle">
           <div class="dialog-header">
@@ -305,6 +364,14 @@
           <label class="field-label dialog-note-label" for="sessionNote">
             <span>SEANS NOTU</span>
             <textarea id="sessionNote" rows="4" placeholder="Bu görüşmeye ait kısa not..."></textarea>
+          </label>
+
+          <label class="field-label dialog-summary-label" for="sessionSummaryStatus">
+            <span>SEANS ÖZETİ</span>
+            <select class="input-box" id="sessionSummaryStatus">
+              <option value="notWritten">Yazılmadı</option>
+              <option value="written">Yazıldı</option>
+            </select>
           </label>
 
           <div class="dialog-payment-row">
@@ -344,6 +411,8 @@
       </div>
     </div>
 
-    <script src="app.js?v=8"></script>
+    <script src="supabase-config.js?v=1"></script>
+    <script src="cloud-store.js?v=1"></script>
+    <script src="app.js?v=11"></script>
   </body>
 </html>

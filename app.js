@@ -3,20 +3,31 @@ const DATABASE_NAME = 'danisman-panel-db';
 const DATABASE_VERSION = 1;
 const DATABASE_STORE = 'app-data';
 const STATE_RECORD_ID = 'workspace-state';
+const PENDING_CLOUD_STATE_ID = 'pending-cloud-state';
 
 const navItems = document.querySelectorAll('.nav-item');
 const screens = document.querySelectorAll('.screen');
+const appShell = document.querySelector('#appShell');
+const loginScreen = document.querySelector('#loginScreen');
+const loginForm = document.querySelector('#loginForm');
+const loginError = document.querySelector('#loginError');
+const loginButton = document.querySelector('#loginButton');
+const syncToolbar = document.querySelector('.sync-toolbar');
+const syncStatus = document.querySelector('#syncStatus');
 const sessionList = document.querySelector('#sessionList');
 const sessionCount = document.querySelector('#sessionCount');
 const todaySessionList = document.querySelector('#todaySessionList');
 const todaySessionCount = document.querySelector('#todaySessionCount');
 const clientList = document.querySelector('#clientList');
+const clientDetailStats = document.querySelector('#clientDetailStats');
+const clientSessionHistory = document.querySelector('#clientSessionHistory');
 const clientForm = document.querySelector('#clientForm');
 const sessionForm = document.querySelector('#sessionForm');
 const sessionClientSelect = document.querySelector('#sessionClient');
 const formModeButtons = document.querySelectorAll('[data-form-mode]');
 const sessionDialog = document.querySelector('#sessionDialog');
 const sessionDialogNote = document.querySelector('#sessionNote');
+const sessionSummaryStatus = document.querySelector('#sessionSummaryStatus');
 const sessionDialogPayment = document.querySelector('#sessionDialogPayment');
 const calendarGrid = document.querySelector('#calendarGrid');
 let activeSessionDialogId = null;
@@ -28,6 +39,11 @@ const EMPTY_STATE = { clients: [], sessions: [] };
 
 let state = { clients: [], sessions: [] };
 let databasePromise;
+let cloudVersion = 0;
+let cloudSyncReady = false;
+let cloudConflictActive = false;
+let queuedCloudWrites = 0;
+let saveQueue = Promise.resolve();
 
 function openDatabase() {
   if (!('indexedDB' in window)) return Promise.reject(new Error('IndexedDB desteklenmiyor.'));
@@ -57,10 +73,45 @@ function readDatabaseState() {
   }));
 }
 
-function writeDatabaseState(snapshot) {
+function writeDatabaseState(snapshot, version = cloudVersion, pendingCloud = false) {
   return openDatabase().then((database) => new Promise((resolve, reject) => {
     const transaction = database.transaction(DATABASE_STORE, 'readwrite');
-    transaction.objectStore(DATABASE_STORE).put({ id: STATE_RECORD_ID, payload: snapshot });
+    transaction.objectStore(DATABASE_STORE).put({
+      id: STATE_RECORD_ID,
+      payload: snapshot,
+      cloudVersion: version,
+      pendingCloud
+    });
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  }));
+}
+
+function readDatabaseRecord(id) {
+  return openDatabase().then((database) => new Promise((resolve, reject) => {
+    const transaction = database.transaction(DATABASE_STORE, 'readonly');
+    const request = transaction.objectStore(DATABASE_STORE).get(id);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+    transaction.onerror = () => reject(transaction.error);
+  }));
+}
+
+function writeDatabaseRecord(record) {
+  return openDatabase().then((database) => new Promise((resolve, reject) => {
+    const transaction = database.transaction(DATABASE_STORE, 'readwrite');
+    transaction.objectStore(DATABASE_STORE).put(record);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  }));
+}
+
+function deleteDatabaseRecord(id) {
+  return openDatabase().then((database) => new Promise((resolve, reject) => {
+    const transaction = database.transaction(DATABASE_STORE, 'readwrite');
+    transaction.objectStore(DATABASE_STORE).delete(id);
     transaction.oncomplete = resolve;
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () => reject(transaction.error);
@@ -70,15 +121,35 @@ function writeDatabaseState(snapshot) {
 function normalizeState(candidate) {
   if (!candidate || !Array.isArray(candidate.clients) || !Array.isArray(candidate.sessions)) return null;
 
+  const cancelledCounts = new Map();
+  const rescheduledCounts = new Map();
+  candidate.sessions.forEach((session) => {
+    if (session.status === 'cancelled') {
+      cancelledCounts.set(session.clientId, (cancelledCounts.get(session.clientId) || 0) + 1);
+    }
+    const history = Array.isArray(session.rescheduleHistory) ? session.rescheduleHistory : [];
+    rescheduledCounts.set(session.clientId, (rescheduledCounts.get(session.clientId) || 0) + history.length);
+  });
+
   return {
     ...candidate,
-    sessions: candidate.sessions.map((session) => {
+    clients: candidate.clients.map((client) => ({
+      ...client,
+      cancelledSessionCount: (Number.isInteger(client.cancelledSessionCount) && client.cancelledSessionCount >= 0
+        ? client.cancelledSessionCount
+        : 0) + (cancelledCounts.get(client.id) || 0),
+      rescheduledSessionCount: Number.isInteger(client.rescheduledSessionCount) && client.rescheduledSessionCount >= 0
+        ? client.rescheduledSessionCount
+        : rescheduledCounts.get(client.id) || 0
+    })),
+    sessions: candidate.sessions.filter((session) => session.status !== 'cancelled').map((session) => {
       const client = candidate.clients.find((item) => item.id === session.clientId);
       const savedFee = Number(session.fee);
       return {
         ...session,
         fee: Number.isFinite(savedFee) ? savedFee : Number(client?.fee) || 0,
         paymentStatus: session.paymentStatus === 'paid' ? 'paid' : 'unpaid',
+        summaryStatus: session.summaryStatus === 'written' ? 'written' : 'notWritten',
         status: ['upcoming', 'completed', 'cancelled'].includes(session.status) ? session.status : 'upcoming'
       };
     })
@@ -96,8 +167,16 @@ function readLegacyState() {
 }
 
 async function loadState() {
-  const stored = normalizeState(await readDatabaseState());
-  if (stored) return stored;
+  const databaseState = await readDatabaseState();
+  const stored = normalizeState(databaseState);
+  if (stored) {
+    const hasCancelledSessions = databaseState.sessions.some((session) => session.status === 'cancelled');
+    const hasMissingClientStats = databaseState.clients.some((client) => (
+      !Number.isInteger(client.cancelledSessionCount) || !Number.isInteger(client.rescheduledSessionCount)
+    ));
+    if (hasCancelledSessions || hasMissingClientStats) await writeDatabaseState(stored);
+    return stored;
+  }
 
   const legacy = readLegacyState();
   const initial = legacy || structuredClone(EMPTY_STATE);
@@ -108,7 +187,7 @@ async function loadState() {
 
 function saveState() {
   const snapshot = structuredClone(state);
-  writeDatabaseState(snapshot).catch((error) => {
+  writeDatabaseState(snapshot, cloudVersion, true).catch((error) => {
     console.error('IndexedDB kaydı başarısız; yerel yedek kullanılıyor:', error);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -116,6 +195,208 @@ function saveState() {
       console.error('Yerel kayıt da başarısız:', fallbackError);
     }
   });
+
+  if (cloudConflictActive) {
+    writeDatabaseRecord({ id: PENDING_CLOUD_STATE_ID, payload: snapshot, baseVersion: cloudVersion })
+      .catch((error) => {
+        console.error('Eşitlenmemiş yedek kaydedilemedi:', error);
+        setSyncStatus(`Yerel yedek kaydedilemedi: ${error.message}`, true);
+      });
+    return;
+  }
+  if (!cloudSyncReady) return;
+  queuedCloudWrites += 1;
+  setSyncStatus('Buluta kaydediliyor…');
+  saveQueue = saveQueue.then(async () => {
+    if (!cloudSyncReady || cloudConflictActive) {
+      await writeDatabaseRecord({ id: PENDING_CLOUD_STATE_ID, payload: snapshot, baseVersion: cloudVersion });
+      queuedCloudWrites -= 1;
+      return;
+    }
+
+    const nextVersion = await window.DanismaCloudStore.saveWorkspace(cloudVersion, snapshot);
+    if (!Number.isInteger(nextVersion)) throw new Error('Bulut sürüm numarası geçersiz.');
+    cloudVersion = nextVersion;
+    queuedCloudWrites -= 1;
+    await writeDatabaseState(snapshot, cloudVersion, false);
+    await deleteDatabaseRecord(PENDING_CLOUD_STATE_ID);
+    if (queuedCloudWrites === 0) setSyncStatus('Bulutla eşitlendi');
+  }).catch((error) => {
+    queuedCloudWrites = Math.max(0, queuedCloudWrites - 1);
+    cloudSyncReady = false;
+    cloudConflictActive = true;
+    console.error('Bulut eşitlemesi başarısız; yerel yedek korundu:', error);
+    return writeDatabaseRecord({ id: PENDING_CLOUD_STATE_ID, payload: snapshot, baseVersion: cloudVersion })
+      .then(() => {
+        document.querySelector('#syncConflictPanel').hidden = false;
+        setSyncStatus(`Eşitleme durdu: ${error.message}. İki yedek de korundu.`, true);
+      }).catch((backupError) => {
+        console.error('Eşitlenmemiş yedek kaydedilemedi:', backupError);
+        setSyncStatus(`Bulut hatası: ${error.message}; yerel yedek de kaydedilemedi: ${backupError.message}`, true);
+      });
+  });
+}
+
+function setSyncStatus(message, hasError = false) {
+  syncStatus.textContent = message;
+  syncToolbar.classList.toggle('has-error', hasError);
+}
+
+function showLogin(message = '') {
+  cloudSyncReady = false;
+  appShell.hidden = true;
+  loginScreen.hidden = false;
+  loginError.textContent = message;
+  loginError.hidden = !message;
+}
+
+function showApp() {
+  loginScreen.hidden = true;
+  appShell.hidden = false;
+}
+
+async function loadCloudWorkspace() {
+  const remote = await window.DanismaCloudStore.fetchWorkspace();
+  let pendingRecord = await readDatabaseRecord(PENDING_CLOUD_STATE_ID);
+  const localRecord = await readDatabaseRecord(STATE_RECORD_ID);
+  const localState = normalizeState(localRecord?.payload);
+  const localHasData = Boolean(localState && (localState.clients.length || localState.sessions.length));
+  const localVersionIsStale = Boolean(remote && localHasData && localRecord.cloudVersion !== undefined
+    && localRecord.cloudVersion !== remote.version);
+  const unmarkedLegacyData = Boolean(remote && localHasData && localRecord.cloudVersion === undefined);
+  if (!pendingRecord && remote && (localRecord?.pendingCloud || localVersionIsStale || unmarkedLegacyData)) {
+    pendingRecord = {
+      id: PENDING_CLOUD_STATE_ID,
+      payload: localState,
+      baseVersion: localRecord.cloudVersion ?? 0
+    };
+    await writeDatabaseRecord(pendingRecord);
+  }
+
+  if (remote && pendingRecord) {
+    const pending = normalizeState(pendingRecord.payload);
+    if (!pending) throw new Error('Bu cihazdaki bekleyen yedek okunamadı; mevcut veriler korunuyor.');
+    state = pending;
+    cloudVersion = remote.version;
+    cloudSyncReady = false;
+    cloudConflictActive = true;
+    document.querySelector('#syncConflictPanel').hidden = false;
+    await writeDatabaseState(state, cloudVersion, true);
+    render();
+    showApp();
+    setSyncStatus('Bulut ve cihaz yedekleri farklı; seçim bekleniyor', true);
+    return;
+  }
+
+  if (!remote && pendingRecord) {
+    const pending = normalizeState(pendingRecord.payload);
+    if (!pending) throw new Error('Bu cihazdaki bekleyen yedek okunamadı; mevcut veriler korunuyor.');
+    state = pending;
+  }
+  if (remote) {
+    const normalized = normalizeState(remote.payload);
+    if (!normalized) throw new Error('Supabase kayıt biçimi tanınmadı; mevcut veriler korunuyor.');
+    state = normalized;
+    cloudVersion = remote.version;
+    await writeDatabaseState(state);
+  } else {
+    if (!pendingRecord) {
+      const local = normalizeState(await readDatabaseState());
+      state = local || structuredClone(EMPTY_STATE);
+    }
+    cloudVersion = await window.DanismaCloudStore.saveWorkspace(0, state);
+    await writeDatabaseState(state, cloudVersion, false);
+    if (pendingRecord) await deleteDatabaseRecord(PENDING_CLOUD_STATE_ID);
+  }
+
+  cloudSyncReady = true;
+  cloudConflictActive = false;
+  document.querySelector('#syncConflictPanel').hidden = true;
+  render();
+  showApp();
+  setSyncStatus('Bulutla eşitlendi');
+}
+
+async function refreshCloudWorkspace() {
+  if (!cloudSyncReady || cloudConflictActive || queuedCloudWrites > 0 || sessionDialog.open) return;
+  try {
+    const remote = await window.DanismaCloudStore.fetchWorkspace();
+    if (!remote || remote.version <= cloudVersion) return;
+    const normalized = normalizeState(remote.payload);
+    if (!normalized) throw new Error('Supabase kayıt biçimi tanınmadı.');
+    state = normalized;
+    cloudVersion = remote.version;
+    await writeDatabaseState(state, cloudVersion, false);
+    render();
+    setSyncStatus('Diğer cihazdaki değişiklikler alındı');
+  } catch (error) {
+    console.error('Bulut verisi yenilenemedi:', error);
+    if (!window.DanismaCloudStore.hasSession()) {
+      showLogin('Oturum sona erdi. Bulut verilerine devam etmek için yeniden giriş yapın.');
+      return;
+    }
+    setSyncStatus(`Bulut verisi yenilenemedi: ${error.message}`, true);
+  }
+}
+
+async function resolveCloudConflict(useLocalCopy) {
+  const conflictPanel = document.querySelector('#syncConflictPanel');
+  const localCopy = structuredClone(state);
+  try {
+    const remote = await window.DanismaCloudStore.fetchWorkspace();
+    if (useLocalCopy) {
+      const message = 'Bu cihazdaki yedek bulut verisinin yerine yazılacak. Devam edilsin mi?';
+      if (!window.confirm(message)) return;
+      if (!remote) throw new Error('Buluttaki kayıt bulunamadı; yerel yedek değiştirilmedi.');
+      const nextVersion = await window.DanismaCloudStore.saveWorkspace(remote.version, localCopy);
+      if (!Number.isInteger(nextVersion)) throw new Error('Bulut sürüm numarası geçersiz.');
+      cloudVersion = nextVersion;
+      await writeDatabaseState(localCopy, cloudVersion, false);
+    } else {
+      if (!window.confirm('Bu cihazdaki eşitlenmemiş yedek bu cihazdan kaldırılacak. Bulut verisi yüklensin mi?')) return;
+      if (!remote) throw new Error('Buluttaki kayıt bulunamadı; yerel yedek değiştirilmedi.');
+      const normalized = normalizeState(remote.payload);
+      if (!normalized) throw new Error('Bulut kaydı okunamadı.');
+      state = normalized;
+      cloudVersion = remote.version;
+      await writeDatabaseState(state, cloudVersion, false);
+    }
+    await deleteDatabaseRecord(PENDING_CLOUD_STATE_ID);
+    cloudConflictActive = false;
+    cloudSyncReady = true;
+    conflictPanel.hidden = true;
+    render();
+    setSyncStatus('Bulutla eşitlendi');
+  } catch (error) {
+    console.error('Bulut ve yerel yedek seçimi tamamlanamadı:', error);
+    setSyncStatus(`Yedekler korunuyor: ${error.message}`, true);
+  }
+}
+
+async function submitLogin(event) {
+  event.preventDefault();
+  loginError.hidden = true;
+  loginButton.disabled = true;
+  loginButton.textContent = 'Giriş yapılıyor…';
+
+  try {
+    await window.DanismaCloudStore.signIn(
+      document.querySelector('#loginUsername').value,
+      document.querySelector('#loginPassword').value
+    );
+    document.querySelector('#loginPassword').value = '';
+    await loadCloudWorkspace();
+  } catch (error) {
+    console.error('Giriş veya bulut verisi yükleme başarısız:', error);
+    loginError.textContent = error.message;
+    loginError.hidden = false;
+    await window.DanismaCloudStore.signOut().catch((signOutError) => {
+      console.error('Başarısız oturum temizlenemedi:', signOutError);
+    });
+  } finally {
+    loginButton.disabled = false;
+    loginButton.textContent = 'Giriş yap';
+  }
 }
 
 function createClient(data) {
@@ -125,7 +406,9 @@ function createClient(data) {
     mode: data.mode,
     fee: Number(data.fee) || 0,
     note: data.note.trim(),
-    createdAt: new Date().toISOString().slice(0, 10)
+    createdAt: new Date().toISOString().slice(0, 10),
+    cancelledSessionCount: 0,
+    rescheduledSessionCount: 0
   };
 
   state.clients.unshift(client);
@@ -205,18 +488,15 @@ function renderCalendar() {
   for (let day = 1; day <= daysInMonth; day += 1) {
     const date = toISODate(new Date(year, month, day));
     const daySessions = (sessionsByDate.get(date) || []).sort((first, second) => first.time.localeCompare(second.time));
-    const activeSessions = daySessions.filter((session) => session.status !== 'cancelled');
     const todayClass = date === toISODate(new Date()) ? ' is-today' : '';
     const selectedClass = date === selectedCalendarDate ? ' is-selected' : '';
-    const occupiedClass = activeSessions.length ? ' has-sessions' : '';
-    const busyClass = activeSessions.length > 2 ? ' is-busy' : '';
-    const cancelledClass = daySessions.length && !activeSessions.length ? ' has-cancelled' : '';
+    const occupiedClass = daySessions.length ? ' has-sessions' : '';
+    const busyClass = daySessions.length > 2 ? ' is-busy' : '';
     const names = daySessions.slice(0, 2).map((session) => {
       const client = getClientById(session.clientId);
       if (!client) return '';
       const firstName = client.name.trim().split(/\s+/)[0];
-      const cancelled = session.status === 'cancelled' ? ' is-cancelled' : '';
-      return `<span class="calendar-session-name${cancelled}">${escapeHtml(firstName)}</span>`;
+      return `<span class="calendar-session-name">${escapeHtml(firstName)}</span>`;
     }).join('');
     const more = daySessions.length > 2 ? `<span class="calendar-more">+${daySessions.length - 2}</span>` : '';
     const namesForLabel = daySessions.map((session) => getClientById(session.clientId)?.name).filter(Boolean).join(', ');
@@ -224,7 +504,7 @@ function renderCalendar() {
     const label = `${day} ${monthName}${namesForLabel ? `, seanslar: ${namesForLabel}` : ', seans yok'}`;
 
     cells.push(`
-      <button class="calendar-day${todayClass}${selectedClass}${occupiedClass}${busyClass}${cancelledClass}" type="button" data-calendar-date="${date}" aria-label="${escapeHtml(label)}" aria-pressed="${date === selectedCalendarDate}">
+      <button class="calendar-day${todayClass}${selectedClass}${occupiedClass}${busyClass}" type="button" data-calendar-date="${date}" aria-label="${escapeHtml(label)}" aria-pressed="${date === selectedCalendarDate}">
         <span class="calendar-day-number">${day}</span>
         <span class="calendar-day-sessions">${names}${more}</span>
       </button>
@@ -260,23 +540,18 @@ function renderSessionRows(sessions, view) {
     if (!client) return '';
 
     const isPast = new Date(`${session.date}T${session.time}:00`) < now;
-    const statusLabel = session.status === 'cancelled'
-      ? 'İptal edildi'
-      : session.status === 'completed'
-        ? 'Tamamlandı'
-        : isPast ? 'Durum girilmedi' : 'Planlandı';
-    const statusClass = session.status === 'cancelled'
-      ? 'cancelled'
-      : session.status === 'completed' ? 'success' : 'pending';
+    const statusLabel = session.status === 'completed'
+      ? 'Tamamlandı'
+      : isPast ? 'Durum girilmedi' : 'Planlandı';
+    const statusClass = session.status === 'completed' ? 'success' : 'pending';
     const paymentStatus = session.paymentStatus === 'paid'
       ? '<span class="tag payment-paid">Ödendi</span>'
       : '<span class="tag payment-unpaid">Ödenmedi</span>';
-    const cancellationDate = session.status === 'cancelled' && session.cancelledAt
-      ? `<small class="history-detail">İptal: ${formatDate(session.cancelledAt.slice(0, 10))}</small>`
-      : '';
-
+    const summaryStatus = session.summaryStatus === 'written'
+      ? '<span class="tag summary-written">Özet yazıldı</span>'
+      : '<span class="tag summary-not-written">Özet yazılmadı</span>';
     return `
-      <div class="session-row ${session.status === 'cancelled' ? 'cancelled-row' : ''}" data-session-id="${session.id}" role="button" tabindex="0" aria-label="${escapeHtml(client.name)} seans ayrıntılarını aç">
+      <div class="session-row" data-session-id="${session.id}" role="button" tabindex="0" aria-label="${escapeHtml(client.name)} seans ayrıntılarını aç">
         <div class="time-block">
           <strong>${escapeHtml(session.time)}</strong>
           ${view === 'calendar' ? '' : `<span>${formatDate(session.date)}</span>`}
@@ -285,12 +560,12 @@ function renderSessionRows(sessions, view) {
           <div>
             <strong>${escapeHtml(client.name)}</strong>
             <small>${getSessionTypeLabel(session.mode)}</small>
-            ${cancellationDate}
           </div>
         </div>
         <div class="session-actions">
           <span class="tag ${statusClass}">${statusLabel}</span>
           ${paymentStatus}
+          ${summaryStatus}
         </div>
       </div>
     `;
@@ -301,7 +576,7 @@ function renderToday() {
   const now = new Date();
   const today = toISODate(now);
   const todaysSessions = state.sessions
-    .filter((session) => session.date === today && session.status !== 'cancelled')
+    .filter((session) => session.date === today)
     .sort((first, second) => first.time.localeCompare(second.time));
 
   document.querySelector('#todayDate').textContent = new Intl.DateTimeFormat('tr-TR', {
@@ -330,18 +605,59 @@ function renderClients() {
 
     return `
       <article class="client-row">
-        <div class="client-row-main">
+        <button class="client-detail-button" type="button" data-client-detail="${client.id}">
           <div class="client-row-info">
             <strong>${escapeHtml(client.name)}</strong>
             <small>${getSessionTypeLabel(client.mode)} · ${formatCurrency(Number(client.fee) || 0)}</small>
             <small>${completedCount} tamamlanan seans${nextSession ? ` · Sıradaki ${formatDate(nextSession.date)} ${escapeHtml(nextSession.time)}` : ''}</small>
-            ${client.note ? `<details class="client-notes"><summary>Danışan notu</summary><p>${escapeHtml(client.note)}</p></details>` : ''}
           </div>
-        </div>
+        </button>
         <button class="client-session-btn" type="button" data-client-session="${client.id}">Seans ekle</button>
       </article>
     `;
   }).join('');
+}
+
+function renderClientDetail(clientId) {
+  const client = getClientById(clientId);
+  if (!client) {
+    activateScreen('clients');
+    return;
+  }
+
+  const clientSessions = state.sessions
+    .filter((session) => session.clientId === client.id)
+    .sort((first, second) => (
+      second.date.localeCompare(first.date) || second.time.localeCompare(first.time)
+    ));
+  const collected = clientSessions
+    .filter((session) => session.paymentStatus === 'paid')
+    .reduce((total, session) => total + (Number(session.fee) || Number(client.fee) || 0), 0);
+  const outstanding = clientSessions
+    .filter((session) => session.paymentStatus !== 'paid')
+    .reduce((total, session) => total + (Number(session.fee) || Number(client.fee) || 0), 0);
+  const stats = [
+    { label: 'Toplam seans', value: String(clientSessions.length) },
+    { label: 'Tamamlanan', value: String(clientSessions.filter((session) => session.status === 'completed').length) },
+    { label: 'Tahsil edilen', value: formatCurrency(collected) },
+    { label: 'Bekleyen ödeme', value: formatCurrency(outstanding) },
+    { label: 'İptal edilen', value: String(client.cancelledSessionCount || 0) },
+    { label: 'Ertelenen', value: String(client.rescheduledSessionCount || 0) }
+  ];
+
+  document.querySelector('#clientDetailTitle').textContent = client.name;
+  document.querySelector('#clientDetailSubtitle').textContent = `${getSessionTypeLabel(client.mode)} · Seans ücreti ${formatCurrency(Number(client.fee) || 0)}`;
+  document.querySelector('#clientDetailNote').textContent = client.note || 'Danışan için kayıtlı not yok.';
+  clientDetailStats.innerHTML = stats.map((stat) => `
+    <div class="client-stat-card">
+      <span>${stat.label}</span>
+      <strong>${stat.value}</strong>
+    </div>
+  `).join('');
+  clientSessionHistory.innerHTML = clientSessions.length
+    ? renderSessionRows(clientSessions, 'client')
+    : '<div class="empty-list">Bu danışan için henüz seans kaydı yok.</div>';
+  activateScreen('client-detail', 'clients');
 }
 
 function renderSessionClientOptions() {
@@ -364,7 +680,7 @@ function setFormMode(mode) {
   sessionForm.classList.toggle('active', mode === 'session');
   document.querySelector('#entryTitle').textContent = isClientMode ? 'Danışan ekle' : 'Seans ekle';
   document.querySelector('#entryDescription').textContent = isClientMode
-    ? 'Danışan bilgilerini kaydedin. Seansları daha sonra ayrıca planlayabilirsiniz.'
+    ? 'Danışan kaydı için seans tarihi ve saati gerekmez; seansları daha sonra ayrıca planlayabilirsiniz.'
     : 'Danışanı seçip tarih ve saat belirleyerek yeni seansı planlayın.';
   if (mode === 'session') renderSessionClientOptions();
 }
@@ -396,7 +712,8 @@ function createSession(data) {
     status: 'upcoming',
     mode: data.mode,
     fee: Number(client.fee) || 0,
-    paymentStatus: 'unpaid'
+    paymentStatus: 'unpaid',
+    summaryStatus: 'notWritten'
   });
   selectedCalendarDate = data.date;
   calendarMonth = new Date(`${data.date}T00:00:00`);
@@ -409,12 +726,14 @@ function createSession(data) {
 
 function cancelSession(id) {
   const session = state.sessions.find((item) => item.id === id);
-  if (!session || !window.confirm('Bu seansı iptal etmek istiyor musunuz? İptal kaydı geçmişte saklanacak.')) return;
+  if (!session || !window.confirm('Bu seansı iptal etmek ve kaydını kalıcı olarak silmek istiyor musunuz?')) return;
 
-  session.status = 'cancelled';
-  session.cancelledAt = new Date().toISOString();
+  const client = getClientById(session.clientId);
+  if (client) client.cancelledSessionCount = (client.cancelledSessionCount || 0) + 1;
+  state.sessions = state.sessions.filter((item) => item.id !== id);
   saveState();
   sessionDialog.close();
+  activeSessionDialogId = null;
   render();
 }
 
@@ -448,6 +767,8 @@ function openSessionDialog(id) {
   rescheduleHistory.hidden = history.length === 0;
   sessionDialogNote.value = session.note || '';
   sessionDialogNote.disabled = isCancelled;
+  sessionSummaryStatus.value = session.summaryStatus === 'written' ? 'written' : 'notWritten';
+  sessionSummaryStatus.disabled = isCancelled;
   sessionDialogPayment.disabled = isCancelled;
   sessionDialogPayment.dataset.paymentStatus = session.paymentStatus === 'paid' ? 'paid' : 'unpaid';
   sessionDialogPayment.textContent = sessionDialogPayment.dataset.paymentStatus === 'paid' ? 'Ödendi' : 'Ödenmedi';
@@ -455,7 +776,7 @@ function openSessionDialog(id) {
   sessionDialogPayment.setAttribute('aria-pressed', String(sessionDialogPayment.dataset.paymentStatus === 'paid'));
   document.querySelector('#cancelSessionFromDialog').hidden = !isPlanned;
   document.querySelector('#completeSessionFromDialog').hidden = !isPlanned;
-  document.querySelector('#saveSessionDetails').hidden = isPlanned || isCancelled;
+  document.querySelector('#saveSessionDetails').hidden = isCancelled;
 
   if (!sessionDialog.open) sessionDialog.showModal();
 }
@@ -465,6 +786,7 @@ function saveSessionDetails(markCompleted) {
   if (!session || session.status === 'cancelled') return;
 
   session.note = sessionDialogNote.value.trim();
+  session.summaryStatus = sessionSummaryStatus.value === 'written' ? 'written' : 'notWritten';
   session.paymentStatus = sessionDialogPayment.dataset.paymentStatus;
   if (markCompleted && session.status === 'upcoming') {
     session.status = 'completed';
@@ -509,6 +831,8 @@ function rescheduleSession() {
       time: session.time,
       changedAt: new Date().toISOString()
     }];
+    const client = getClientById(session.clientId);
+    if (client) client.rescheduledSessionCount = (client.rescheduledSessionCount || 0) + 1;
     session.date = newDate;
     session.time = newTime;
   }
@@ -636,6 +960,29 @@ sessionDialog.addEventListener('click', (event) => {
   if (event.target === sessionDialog) sessionDialog.close();
 });
 
+loginForm.addEventListener('submit', submitLogin);
+document.querySelector('#logoutButton').addEventListener('click', async () => {
+  const logoutButton = document.querySelector('#logoutButton');
+  logoutButton.disabled = true;
+  try {
+    await saveQueue;
+    cloudSyncReady = false;
+    await window.DanismaCloudStore.signOut();
+  } catch (error) {
+    console.error('Supabase oturumu kapatılamadı:', error);
+    setSyncStatus(`Oturum kapatma hatası: ${error.message}`, true);
+  } finally {
+    logoutButton.disabled = false;
+  }
+  showLogin();
+});
+document.querySelector('#refreshCloudButton').addEventListener('click', refreshCloudWorkspace);
+document.querySelector('#keepLocalCopyButton').addEventListener('click', () => resolveCloudConflict(true));
+document.querySelector('#useCloudCopyButton').addEventListener('click', () => resolveCloudConflict(false));
+window.addEventListener('focus', refreshCloudWorkspace);
+window.addEventListener('online', refreshCloudWorkspace);
+window.setInterval(refreshCloudWorkspace, 45_000);
+
 calendarGrid.addEventListener('click', (event) => {
   const dayButton = event.target.closest('[data-calendar-date]');
   if (!dayButton) return;
@@ -682,6 +1029,12 @@ document.querySelector('#addClientButton').addEventListener('click', () => {
 });
 
 clientList.addEventListener('click', (event) => {
+  const detailButton = event.target.closest('[data-client-detail]');
+  if (detailButton) {
+    renderClientDetail(detailButton.dataset.clientDetail);
+    return;
+  }
+
   const button = event.target.closest('[data-client-session]');
   if (!button) return;
 
@@ -690,6 +1043,10 @@ clientList.addEventListener('click', (event) => {
   sessionClientSelect.value = button.dataset.clientSession;
   updateSessionMode();
 });
+
+clientSessionHistory.addEventListener('click', handleSessionRowClick);
+clientSessionHistory.addEventListener('keydown', handleSessionRowKeydown);
+document.querySelector('#backToClients').addEventListener('click', () => activateScreen('clients'));
 
 sessionClientSelect.addEventListener('change', updateSessionMode);
 
@@ -743,12 +1100,24 @@ async function initializeApp() {
     }
   }
 
-  render();
-
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js').catch((error) => {
       console.error('Çevrimdışı uygulama kaydı başarısız:', error);
     });
+  }
+
+  try {
+    const savedSession = await window.DanismaCloudStore.restoreSession();
+    if (savedSession) {
+      await loadCloudWorkspace();
+    } else {
+      showLogin(window.DanismaCloudStore.isConfigured()
+        ? ''
+        : 'Girişten önce Supabase URL ve Publishable/anon key ayarlanmalı.');
+    }
+  } catch (error) {
+    console.error('Supabase oturumu veya verisi yüklenemedi:', error);
+    showLogin(error.message);
   }
 }
 

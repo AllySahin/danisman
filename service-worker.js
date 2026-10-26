@@ -1,9 +1,10 @@
-const CACHE_NAME = 'danisman-pwa-v4';
+const CACHE_NAME = 'danisman-pwa-v7';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=6',
-  './app.js?v=8',
+  './styles.css?v=9',
+  './cloud-store.js?v=1',
+  './app.js?v=11',
   './manifest.webmanifest',
   './app-icon.svg'
 ];
@@ -29,6 +30,16 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+
+  if (new URL(request.url).pathname.endsWith('/supabase-config.js')) {
+    event.respondWith(
+      fetch(request).then((response) => {
+        if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+        return response;
+      }).catch(() => caches.match(request))
+    );
+    return;
+  }
 
   if (request.mode === 'navigate') {
     const indexUrl = new URL('./index.html', self.registration.scope).href;
