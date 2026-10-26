@@ -12,8 +12,6 @@ const loginScreen = document.querySelector('#loginScreen');
 const loginForm = document.querySelector('#loginForm');
 const loginError = document.querySelector('#loginError');
 const loginButton = document.querySelector('#loginButton');
-const syncToolbar = document.querySelector('.sync-toolbar');
-const syncStatus = document.querySelector('#syncStatus');
 const sessionList = document.querySelector('#sessionList');
 const sessionCount = document.querySelector('#sessionCount');
 const todaySessionList = document.querySelector('#todaySessionList');
@@ -238,8 +236,7 @@ function saveState() {
 }
 
 function setSyncStatus(message, hasError = false) {
-  syncStatus.textContent = message;
-  syncToolbar.classList.toggle('has-error', hasError);
+  if (hasError) console.error(message);
 }
 
 function showLogin(message = '') {
@@ -961,21 +958,6 @@ sessionDialog.addEventListener('click', (event) => {
 });
 
 loginForm.addEventListener('submit', submitLogin);
-document.querySelector('#logoutButton').addEventListener('click', async () => {
-  const logoutButton = document.querySelector('#logoutButton');
-  logoutButton.disabled = true;
-  try {
-    await saveQueue;
-    cloudSyncReady = false;
-    await window.DanismaCloudStore.signOut();
-  } catch (error) {
-    console.error('Supabase oturumu kapatılamadı:', error);
-    setSyncStatus(`Oturum kapatma hatası: ${error.message}`, true);
-  } finally {
-    logoutButton.disabled = false;
-  }
-  showLogin();
-});
 document.querySelector('#keepLocalCopyButton').addEventListener('click', () => resolveCloudConflict(true));
 document.querySelector('#useCloudCopyButton').addEventListener('click', () => resolveCloudConflict(false));
 window.addEventListener('focus', refreshCloudWorkspace);
