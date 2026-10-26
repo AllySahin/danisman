@@ -976,7 +976,6 @@ document.querySelector('#logoutButton').addEventListener('click', async () => {
   }
   showLogin();
 });
-document.querySelector('#refreshCloudButton').addEventListener('click', refreshCloudWorkspace);
 document.querySelector('#keepLocalCopyButton').addEventListener('click', () => resolveCloudConflict(true));
 document.querySelector('#useCloudCopyButton').addEventListener('click', () => resolveCloudConflict(false));
 window.addEventListener('focus', refreshCloudWorkspace);
