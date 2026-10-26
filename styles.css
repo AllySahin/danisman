@@ -458,7 +458,7 @@ button {
 
 .session-row {
   display: grid;
-  grid-template-columns: 58px 1fr auto;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
   gap: 9px;
   align-items: center;
   padding: 11px 8px;
@@ -499,17 +499,35 @@ button {
 
 .client-name {
   display: block;
+  min-width: 0;
+}
+
+.client-name > div {
+  min-width: 0;
 }
 
 .client-name strong {
   display: block;
   font-size: 0.88rem;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .client-name small {
+  display: block;
+  margin-top: 4px;
   color: var(--muted);
   font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.dialog-summary-label .field-help {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-transform: none;
 }
 
 .tag {
@@ -622,18 +640,39 @@ button {
 .client-detail-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
+  gap: 8px;
   margin-bottom: 12px;
 }
 
 .client-stat-card {
   display: grid;
-  gap: 7px;
+  gap: 4px;
   min-width: 0;
-  padding: 13px 12px;
-  border-radius: 14px;
-  background: var(--panel-strong);
-  box-shadow: inset 0 0 0 1px var(--border);
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: #fbf5f7;
+  box-shadow: inset 0 0 0 1px rgba(185, 130, 152, 0.16);
+}
+
+.client-stat-card:nth-child(2),
+.client-stat-card:nth-child(3) {
+  background: #f4f8f4;
+  box-shadow: inset 0 0 0 1px rgba(105, 134, 114, 0.16);
+}
+
+.client-stat-card:nth-child(4) {
+  background: #fbf7f0;
+  box-shadow: inset 0 0 0 1px rgba(200, 167, 122, 0.2);
+}
+
+.client-stat-card:nth-child(5) {
+  background: #faf3f1;
+  box-shadow: inset 0 0 0 1px rgba(199, 127, 117, 0.17);
+}
+
+.client-stat-card:nth-child(6) {
+  background: #f5f4f9;
+  box-shadow: inset 0 0 0 1px rgba(133, 116, 157, 0.16);
 }
 
 .client-stat-card span {
@@ -650,6 +689,24 @@ button {
 .client-note-box,
 .client-history-box {
   margin-top: 12px;
+}
+
+.screen[data-screen="client-detail"] .page-title {
+  margin-top: 12px;
+  font-size: 1.8rem;
+  color: var(--accent-strong);
+}
+
+.screen[data-screen="client-detail"] .panel-box {
+  padding: 16px 14px 12px;
+}
+
+.screen[data-screen="client-detail"] .client-note-box {
+  background: #fbf6f3;
+}
+
+.screen[data-screen="client-detail"] .client-history-box {
+  background: #f8f4f7;
 }
 
 .client-note-box h2,
@@ -1407,17 +1464,31 @@ textarea {
   stroke-width: 2;
 }
 
+@media (max-width: 640px) {
+  .session-row {
+    grid-template-columns: 74px minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .session-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .session-actions .tag {
+    padding: 6px 9px;
+  }
+}
+
 @media (max-width: 420px) {
   .phone-screen {
     border-radius: 0;
     min-height: 100vh;
     min-height: 100dvh;
     padding-top: 12px;
-  }
-
-  .session-row {
-    grid-template-columns: 54px minmax(0, 1fr) auto;
-    gap: 7px;
   }
 
   .calendar-toolbar {

@@ -29,6 +29,7 @@ const sessionSummaryStatus = document.querySelector('#sessionSummaryStatus');
 const sessionDialogPayment = document.querySelector('#sessionDialogPayment');
 const calendarGrid = document.querySelector('#calendarGrid');
 let activeSessionDialogId = null;
+let activeClientDetailId = null;
 const currentDate = new Date();
 let calendarMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
 let selectedCalendarDate = toISODate(currentDate);
@@ -621,6 +622,7 @@ function renderClientDetail(clientId) {
     activateScreen('clients');
     return;
   }
+  activeClientDetailId = client.id;
 
   const clientSessions = state.sessions
     .filter((session) => session.clientId === client.id)
@@ -795,6 +797,18 @@ function saveSessionDetails(markCompleted) {
   render();
 }
 
+function saveSessionSummaryStatus() {
+  const session = state.sessions.find((item) => item.id === activeSessionDialogId);
+  if (!session || session.status === 'cancelled') return;
+
+  const summaryStatus = sessionSummaryStatus.value === 'written' ? 'written' : 'notWritten';
+  if (session.summaryStatus === summaryStatus) return;
+
+  session.summaryStatus = summaryStatus;
+  saveState();
+  render();
+}
+
 function rescheduleSession() {
   const session = state.sessions.find((item) => item.id === activeSessionDialogId);
   if (!session || session.status !== 'upcoming') return;
@@ -936,6 +950,7 @@ sessionDialogPayment.addEventListener('click', () => {
 
 document.querySelector('#completeSessionFromDialog').addEventListener('click', () => saveSessionDetails(true));
 document.querySelector('#saveSessionDetails').addEventListener('click', () => saveSessionDetails(false));
+sessionSummaryStatus.addEventListener('change', saveSessionSummaryStatus);
 document.querySelector('#cancelSessionFromDialog').addEventListener('click', () => cancelSession(activeSessionDialogId));
 document.querySelector('#rescheduleSessionButton').addEventListener('click', () => {
   document.querySelector('#reschedulePanel').hidden = false;
@@ -1066,6 +1081,9 @@ function render() {
   renderClients();
   renderIncome();
   renderSessionClientOptions();
+  if (activeClientDetailId && document.querySelector('.screen[data-screen="client-detail"]').classList.contains('active')) {
+    renderClientDetail(activeClientDetailId);
+  }
 }
 
 async function initializeApp() {
