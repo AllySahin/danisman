@@ -111,6 +111,7 @@
           <button class="dialog-secondary-btn client-back-btn" id="backToClients" type="button">‹ Danışanlara dön</button>
           <h1 class="page-title" id="clientDetailTitle"></h1>
           <p class="subtext" id="clientDetailSubtitle"></p>
+          <button class="dialog-secondary-btn" id="editClientButton" type="button">Danışan bilgilerini düzenle</button>
 
           <section class="client-detail-stats" id="clientDetailStats" aria-label="Danışan istatistikleri"></section>
 
@@ -194,6 +195,7 @@
           </div>
 
           <form id="clientForm" class="new-session-form form-panel active">
+            <input type="hidden" id="editingClientId" />
             <label class="field-label">
               <span>DANIŞAN ADI</span>
               <input class="input-box" id="clientName" name="clientName" type="text" placeholder="Örn. Ayşe Yılmaz" required />
@@ -217,7 +219,8 @@
               <textarea id="clientNote" name="clientNote" rows="4" placeholder="Kaygı seviyesi yüksek, düzeni izlenmeli..."></textarea>
             </label>
 
-            <button type="submit" class="save-btn">+ Danışan ekle</button>
+            <button type="submit" class="save-btn" id="saveClientButton">+ Danışan ekle</button>
+            <button type="button" class="dialog-secondary-btn" id="cancelClientEdit" hidden>Düzenlemeden vazgeç</button>
           </form>
 
           <form id="sessionForm" class="new-session-form form-panel">
@@ -355,6 +358,15 @@
             <strong id="sessionDialogFee"></strong>
           </div>
 
+          <label class="field-label" for="sessionDialogMode">
+            <span>GÖRÜŞME TİPİ</span>
+            <select class="input-box" id="sessionDialogMode">
+              <option value="online">Online</option>
+              <option value="faceToFace">Yüz yüze</option>
+            </select>
+            <small class="field-help">Bu değişiklik yalnızca seçili seansı etkiler. Kaydet düğmesine basın.</small>
+          </label>
+
           <label class="field-label dialog-note-label" for="sessionNote">
             <span>SEANS NOTU</span>
             <textarea id="sessionNote" rows="4" placeholder="Bu görüşmeye ait kısa not..."></textarea>
@@ -408,6 +420,6 @@
 
     <script src="supabase-config.js?v=1"></script>
     <script src="cloud-store.js?v=1"></script>
-    <script src="app.js?v=15"></script>
+    <script src="app.js?v=16"></script>
   </body>
 </html>
