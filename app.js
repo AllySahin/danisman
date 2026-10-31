@@ -415,6 +415,41 @@ function createClient(data) {
   activateScreen('clients');
 }
 
+function saveClientChanges(id, data) {
+  const client = getClientById(id);
+  if (!client) return false;
+  client.name = data.name.trim();
+  client.mode = data.mode === 'online' ? 'online' : 'faceToFace';
+  client.fee = Number(data.fee) || 0;
+  client.note = data.note.trim();
+  // Previously recorded session modes and fees remain unchanged.
+  saveState();
+  render();
+  renderClientDetail(id);
+  return true;
+}
+
+function resetClientEditor() {
+  document.querySelector('#editingClientId').value = '';
+  document.querySelector('#saveClientButton').textContent = '+ Danışan ekle';
+  document.querySelector('#cancelClientEdit').hidden = true;
+  clientForm.reset();
+}
+
+function startClientEdit(id) {
+  const client = getClientById(id);
+  if (!client) return;
+  document.querySelector('#editingClientId').value = id;
+  document.querySelector('#clientName').value = client.name;
+  document.querySelector('#clientMode').value = client.mode;
+  document.querySelector('#clientFee').value = client.fee;
+  document.querySelector('#clientNote').value = client.note || '';
+  document.querySelector('#saveClientButton').textContent = 'Değişiklikleri kaydet';
+  document.querySelector('#cancelClientEdit').hidden = false;
+  activateScreen('new-session', 'client-detail');
+  setFormMode('client');
+}
+
 function toISODate(date) {
   const offset = date.getTimezoneOffset();
   const localDate = new Date(date.getTime() - offset * 60 * 1000);
@@ -682,6 +717,10 @@ function setFormMode(mode) {
     ? 'Danışan kaydı için seans tarihi ve saati gerekmez; seansları daha sonra ayrıca planlayabilirsiniz.'
     : 'Danışanı seçip tarih ve saat belirleyerek yeni seansı planlayın.';
   if (mode === 'session') renderSessionClientOptions();
+  if (mode === 'client' && document.querySelector('#editingClientId').value) {
+    document.querySelector('#entryTitle').textContent = 'Danışanı düzenle';
+    document.querySelector('#entryDescription').textContent = 'Görüşme tercihi yeni seanslar için varsayılandır. Eski seanslar değişmez.';
+  }
 }
 
 function updateSessionMode() {
@@ -764,6 +803,8 @@ function openSessionDialog(id) {
     `<small>Önceki tarih: ${formatDate(change.date)} · ${escapeHtml(change.time)}</small>`
   )).join('');
   rescheduleHistory.hidden = history.length === 0;
+  document.querySelector('#sessionDialogMode').value = session.mode === 'online' ? 'online' : 'faceToFace';
+  document.querySelector('#sessionDialogMode').disabled = isCancelled;
   sessionDialogNote.value = session.note || '';
   sessionDialogNote.disabled = isCancelled;
   sessionSummaryStatus.value = session.summaryStatus === 'written' ? 'written' : 'notWritten';
@@ -784,6 +825,7 @@ function saveSessionDetails(markCompleted) {
   const session = state.sessions.find((item) => item.id === activeSessionDialogId);
   if (!session || session.status === 'cancelled') return;
 
+  session.mode = document.querySelector('#sessionDialogMode').value === 'online' ? 'online' : 'faceToFace';
   session.note = sessionDialogNote.value.trim();
   session.summaryStatus = sessionSummaryStatus.value === 'written' ? 'written' : 'notWritten';
   session.paymentStatus = sessionDialogPayment.dataset.paymentStatus;
@@ -1020,6 +1062,7 @@ document.querySelector('#todayAddSessionButton').addEventListener('click', () =>
 });
 
 document.querySelector('#addClientButton').addEventListener('click', () => {
+  resetClientEditor();
   activateScreen('new-session', 'clients');
   setFormMode('client');
 });
@@ -1043,6 +1086,8 @@ clientList.addEventListener('click', (event) => {
 clientSessionHistory.addEventListener('click', handleSessionRowClick);
 clientSessionHistory.addEventListener('keydown', handleSessionRowKeydown);
 document.querySelector('#backToClients').addEventListener('click', () => activateScreen('clients'));
+document.querySelector('#editClientButton').addEventListener('click', () => startClientEdit(activeClientDetailId));
+document.querySelector('#cancelClientEdit').addEventListener('click', () => { resetClientEditor(); activateScreen('clients'); });
 
 sessionClientSelect.addEventListener('change', updateSessionMode);
 
@@ -1061,8 +1106,13 @@ clientForm.addEventListener('submit', (event) => {
     return;
   }
 
-  createClient(data);
-  clientForm.reset();
+  const editingId = document.querySelector('#editingClientId').value;
+  if (editingId) {
+    if (saveClientChanges(editingId, data)) resetClientEditor();
+  } else {
+    createClient(data);
+    resetClientEditor();
+  }
 });
 
 sessionForm.addEventListener('submit', (event) => {
