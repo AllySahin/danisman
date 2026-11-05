@@ -621,15 +621,8 @@ function renderToday() {
   todaySessionList.innerHTML = renderSessionRows(todaysSessions, 'today');
 }
 
-function renderClients() {
-  clientCount.textContent = String(state.clients.length);
-
-  if (!state.clients.length) {
-    clientList.innerHTML = '<div class="empty-list">Henüz danışan kaydı yok.</div>';
-    return;
-  }
-
-  clientList.innerHTML = state.clients.map((client) => {
+function renderClientRows(clients) {
+  return clients.map((client) => {
     const clientSessions = state.sessions.filter((session) => session.clientId === client.id);
     const completedCount = clientSessions.filter((session) => session.status === 'completed').length;
     const nextSession = clientSessions
@@ -649,6 +642,19 @@ function renderClients() {
       </article>
     `;
   }).join('');
+}
+}
+
+function renderClients() {
+  const active = state.clients.filter((client) => client.active !== false);
+  const inactive = state.clients.filter((client) => client.active === false);
+  clientCount.textContent = String(state.clients.length);
+  document.querySelector('#activeClientCount').textContent = String(active.length);
+  document.querySelector('#inactiveClientCount').textContent = String(inactive.length);
+  clientList.innerHTML = active.length ? renderClientRows(active) : '<div class="empty-list">Aktif danışan bulunmuyor.</div>';
+  document.querySelector('#inactiveClientList').innerHTML = inactive.length
+    ? renderClientRows(inactive)
+    : '<div class="empty-list">Pasif danışan bulunmuyor.</div>';
 }
 
 function renderClientDetail(clientId) {
@@ -682,6 +688,11 @@ function renderClientDetail(clientId) {
   document.querySelector('#clientDetailTitle').textContent = client.name;
   document.querySelector('#clientDetailSubtitle').textContent = `${getSessionTypeLabel(client.mode)} · Seans ücreti ${formatCurrency(Number(client.fee) || 0)}`;
   document.querySelector('#clientDetailNote').textContent = client.note || 'Danışan için kayıtlı not yok.';
+  const isInactive = client.active === false;
+  document.querySelector('#toggleClientActiveButton').textContent = isInactive ? 'Aktife al' : 'Pasife al';
+  document.querySelector('#clientInactiveReason').textContent = isInactive
+    ? 'Pasif danışan' + (client.inactiveReason ? ' · ' + client.inactiveReason : '')
+    : '';
   clientDetailStats.innerHTML = stats.map((stat) => `
     <div class="client-stat-card">
       <span>${stat.label}</span>
@@ -1087,6 +1098,24 @@ clientSessionHistory.addEventListener('click', handleSessionRowClick);
 clientSessionHistory.addEventListener('keydown', handleSessionRowKeydown);
 document.querySelector('#backToClients').addEventListener('click', () => activateScreen('clients'));
 document.querySelector('#editClientButton').addEventListener('click', () => startClientEdit(activeClientDetailId));
+document.querySelector('#toggleClientActiveButton').addEventListener('click', () => {
+  const client = getClientById(activeClientDetailId);
+  if (!client) return;
+  if (client.active === false) {
+    client.active = true;
+    client.inactiveReason = '';
+  } else {
+    const futureSessions = state.sessions.filter((session) => session.clientId === client.id
+      && session.status === 'upcoming' && new Date(session.date + 'T' + session.time + ':00') >= new Date());
+    if (futureSessions.length && !window.confirm('Bu danışanın ' + futureSessions.length + ' planlı seansı var. Seanslar silinmeden pasife alınsın mı?')) return;
+    const reason = window.prompt('Pasife alma nedeni (isteğe bağlı): Ara verdi / Süreci tamamladı / İletişim kesildi / Diğer', '');
+    if (reason === null) return;
+    client.active = false;
+    client.inactiveReason = reason.trim();
+  }
+  saveState();
+  render();
+});
 document.querySelector('#cancelClientEdit').addEventListener('click', () => { resetClientEditor(); activateScreen('clients'); });
 
 sessionClientSelect.addEventListener('change', updateSessionMode);
