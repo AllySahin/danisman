@@ -676,7 +676,6 @@ function renderClientRows(clients) {
 function renderClients() {
   const active = state.clients.filter((client) => client.active !== false);
   const inactive = state.clients.filter((client) => client.active === false);
-  clientCount.textContent = String(state.clients.length);
   document.querySelector('#activeClientCount').textContent = String(active.length);
   document.querySelector('#inactiveClientCount').textContent = String(inactive.length);
   clientList.innerHTML = active.length ? renderClientRows(active) : '<div class="empty-list">Aktif danışan bulunmuyor.</div>';
