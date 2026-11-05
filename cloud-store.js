@@ -114,7 +114,13 @@
     }
     if (!saved?.refreshToken) return null;
     session = saved;
-    return validSession();
+    try {
+      return await validSession();
+    } catch (error) {
+      // A network outage is not an invalid login. Preserve the refresh token.
+      if (error.status === 400 || error.status === 401) return null;
+      return session;
+    }
   }
 
   async function signIn(username, password) {
