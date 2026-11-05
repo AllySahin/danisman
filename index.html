@@ -99,14 +99,14 @@
 
           <section class="panel-box">
             <div class="section-header">
-              <h3>Danışan listesi</h3>
-              <span class="count-badge" id="clientCount">0</span>
+              <h3>Aktif danışanlar <span class="count-badge" id="activeClientCount">0</span></h3>
               <button class="add-session-btn" id="addClientButton" type="button">+ Danışan</button>
             </div>
-            <h4>Aktif danışanlar <span class="count-badge" id="activeClientCount">0</span></h4>
             <div id="clientList"></div>
+          </section>
+          <section class="panel-box">
             <details id="inactiveClientsDetails" class="inactive-clients">
-              <summary>Pasif danışanlar (<span id="inactiveClientCount">0</span>)</summary>
+              <summary><strong>Pasif danışanlar</strong> <span class="count-badge" id="inactiveClientCount">0</span></summary>
               <div id="inactiveClientList"></div>
             </details>
           </section>
@@ -427,6 +427,6 @@
 
     <script src="supabase-config.js?v=1"></script>
     <script src="cloud-store.js?v=2"></script>
-    <script src="app.js?v=18"></script>
+    <script src="app.js?v=19"></script>
   </body>
 </html>
