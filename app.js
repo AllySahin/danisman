@@ -672,7 +672,6 @@ function renderClientRows(clients) {
     `;
   }).join('');
 }
-}
 
 function renderClients() {
   const active = state.clients.filter((client) => client.active !== false);
