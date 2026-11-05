@@ -395,20 +395,31 @@ async function submitLogin(event) {
   loginButton.disabled = true;
   loginButton.textContent = 'Giriş yapılıyor…';
 
+  let authenticated = false;
   try {
     await window.DanismaCloudStore.signIn(
       document.querySelector('#loginUsername').value,
       document.querySelector('#loginPassword').value
     );
+    authenticated = true;
     document.querySelector('#loginPassword').value = '';
-    await loadCloudWorkspace();
+    try {
+      await loadCloudWorkspace();
+    } catch (syncError) {
+      console.error('Giriş başarılı, bulut yüklemesi bekliyor:', syncError);
+      // A cloud/network failure must not log out a successfully authenticated user.
+      state = normalizeState(await readDatabaseState()) || state;
+      render();
+      showApp();
+      cloudSyncReady = false;
+      scheduleCloudReconnect();
+    }
   } catch (error) {
-    console.error('Giriş veya bulut verisi yükleme başarısız:', error);
+    console.error('Giriş başarısız:', error);
     loginError.textContent = error.message;
     loginError.hidden = false;
-    await window.DanismaCloudStore.signOut().catch((signOutError) => {
-      console.error('Başarısız oturum temizlenemedi:', signOutError);
-    });
+    // Never clear a valid login just because workspace synchronization failed.
+    if (!authenticated) console.warn('Kimlik doğrulama tamamlanamadı.');
   } finally {
     loginButton.disabled = false;
     loginButton.textContent = 'Giriş yap';
