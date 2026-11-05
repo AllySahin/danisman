@@ -1,10 +1,10 @@
-const CACHE_NAME = 'danisman-pwa-v16';
+const CACHE_NAME = 'danisman-pwa-v17';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css?v=16',
-  './cloud-store.js?v=1',
-  './app.js?v=17',
+  './cloud-store.js?v=2',
+  './app.js?v=18',
   './manifest.webmanifest',
   './app-icon.svg'
 ];
