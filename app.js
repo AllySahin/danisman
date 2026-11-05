@@ -188,6 +188,7 @@ async function loadState() {
 
 function saveState() {
   const snapshot = structuredClone(state);
+  queuedCloudWrites += 1;
   // Serialize local persistence so older snapshots cannot overwrite newer ones.
   saveQueue = saveQueue.then(async () => {
     await writeDatabaseState(snapshot, cloudVersion, true);
@@ -197,7 +198,7 @@ function saveState() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch (fallbackError) {
       console.error('Yerel yedek de kaydedilemedi:', fallbackError);
     }
-  }).then(() => syncPendingChanges());
+  }).then(() => syncPendingChanges()).finally(() => { queuedCloudWrites = Math.max(0, queuedCloudWrites - 1); });
 }
 
 function scheduleCloudReconnect() {
@@ -332,7 +333,7 @@ async function loadCloudWorkspace() {
 }
 
 async function refreshCloudWorkspace() {
-  if (!cloudSyncReady || cloudConflictActive || syncInProgress || sessionDialog.open) return;
+  if (!cloudSyncReady || cloudConflictActive || syncInProgress || queuedCloudWrites > 0 || sessionDialog.open) return;
   if (await readDatabaseRecord(PENDING_CLOUD_STATE_ID)) { await syncPendingChanges(); return; }
   try {
     const remote = await window.DanismaCloudStore.fetchWorkspace();
