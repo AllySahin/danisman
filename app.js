@@ -43,6 +43,8 @@ let cloudSyncReady = false;
 let cloudConflictActive = false;
 let queuedCloudWrites = 0;
 let saveQueue = Promise.resolve();
+let syncRetryTimer = null;
+let syncInProgress = false;
 
 function openDatabase() {
   if (!('indexedDB' in window)) return Promise.reject(new Error('IndexedDB desteklenmiyor.'));
@@ -186,55 +188,68 @@ async function loadState() {
 
 function saveState() {
   const snapshot = structuredClone(state);
-  writeDatabaseState(snapshot, cloudVersion, true).catch((error) => {
-    console.error('IndexedDB kaydı başarısız; yerel yedek kullanılıyor:', error);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-    } catch (fallbackError) {
-      console.error('Yerel kayıt da başarısız:', fallbackError);
+  // Serialize local persistence so older snapshots cannot overwrite newer ones.
+  saveQueue = saveQueue.then(async () => {
+    await writeDatabaseState(snapshot, cloudVersion, true);
+    await writeDatabaseRecord({ id: PENDING_CLOUD_STATE_ID, payload: snapshot, baseVersion: cloudVersion });
+  }).catch((error) => {
+    console.error('Yerel kayıt başarısız:', error);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch (fallbackError) {
+      console.error('Yerel yedek de kaydedilemedi:', fallbackError);
     }
-  });
+  }).then(() => syncPendingChanges());
+}
 
-  if (cloudConflictActive) {
-    writeDatabaseRecord({ id: PENDING_CLOUD_STATE_ID, payload: snapshot, baseVersion: cloudVersion })
-      .catch((error) => {
-        console.error('Eşitlenmemiş yedek kaydedilemedi:', error);
-        setSyncStatus(`Yerel yedek kaydedilemedi: ${error.message}`, true);
-      });
+function scheduleCloudReconnect() {
+  window.setTimeout(async () => {
+    if (cloudSyncReady || cloudConflictActive || !window.DanismaCloudStore.hasSession()) return;
+    try { await loadCloudWorkspace(); await syncPendingChanges(); }
+    catch (error) {
+      console.warn('Buluta yeniden bağlanılacak:', error);
+      scheduleCloudReconnect();
+    }
+  }, 15000);
+}
+
+function scheduleSyncRetry() {
+  if (syncRetryTimer || cloudConflictActive) return;
+  syncRetryTimer = window.setTimeout(() => {
+    syncRetryTimer = null;
+    syncPendingChanges();
+  }, 10000);
+}
+
+async function syncPendingChanges() {
+  if (syncInProgress || !cloudSyncReady || cloudConflictActive || !navigator.onLine) {
+    if (!cloudConflictActive) scheduleSyncRetry();
     return;
   }
-  if (!cloudSyncReady) return;
-  queuedCloudWrites += 1;
-  setSyncStatus('Buluta kaydediliyor…');
-  saveQueue = saveQueue.then(async () => {
-    if (!cloudSyncReady || cloudConflictActive) {
-      await writeDatabaseRecord({ id: PENDING_CLOUD_STATE_ID, payload: snapshot, baseVersion: cloudVersion });
-      queuedCloudWrites -= 1;
+  syncInProgress = true;
+  try {
+    const pending = await readDatabaseRecord(PENDING_CLOUD_STATE_ID);
+    if (!pending) return;
+    const remote = await window.DanismaCloudStore.fetchWorkspace();
+    if (!remote || remote.version !== pending.baseVersion) {
+      cloudConflictActive = true;
+      cloudSyncReady = false;
+      document.querySelector('#syncConflictPanel').hidden = false;
+      setSyncStatus('Başka cihazda değişiklik var; yedekler korundu.', true);
       return;
     }
-
-    const nextVersion = await window.DanismaCloudStore.saveWorkspace(cloudVersion, snapshot);
-    if (!Number.isInteger(nextVersion)) throw new Error('Bulut sürüm numarası geçersiz.');
+    const nextVersion = await window.DanismaCloudStore.saveWorkspace(remote.version, pending.payload);
     cloudVersion = nextVersion;
-    queuedCloudWrites -= 1;
-    await writeDatabaseState(snapshot, cloudVersion, false);
+    await writeDatabaseState(pending.payload, cloudVersion, false);
     await deleteDatabaseRecord(PENDING_CLOUD_STATE_ID);
-    if (queuedCloudWrites === 0) setSyncStatus('Bulutla eşitlendi');
-  }).catch((error) => {
-    queuedCloudWrites = Math.max(0, queuedCloudWrites - 1);
-    cloudSyncReady = false;
-    cloudConflictActive = true;
-    console.error('Bulut eşitlemesi başarısız; yerel yedek korundu:', error);
-    return writeDatabaseRecord({ id: PENDING_CLOUD_STATE_ID, payload: snapshot, baseVersion: cloudVersion })
-      .then(() => {
-        document.querySelector('#syncConflictPanel').hidden = false;
-        setSyncStatus(`Eşitleme durdu: ${error.message}. İki yedek de korundu.`, true);
-      }).catch((backupError) => {
-        console.error('Eşitlenmemiş yedek kaydedilemedi:', backupError);
-        setSyncStatus(`Bulut hatası: ${error.message}; yerel yedek de kaydedilemedi: ${backupError.message}`, true);
-      });
-  });
+    setSyncStatus('Bulutla eşitlendi');
+  } catch (error) {
+    console.error('Otomatik senkronizasyon bekliyor:', error);
+    setSyncStatus('Bağlantı bekleniyor; değişiklikler cihazda korundu.', true);
+    scheduleSyncRetry();
+  } finally {
+    syncInProgress = false;
+  }
 }
+
 
 function setSyncStatus(message, hasError = false) {
   if (hasError) console.error(message);
@@ -313,10 +328,12 @@ async function loadCloudWorkspace() {
   render();
   showApp();
   setSyncStatus('Bulutla eşitlendi');
+  syncPendingChanges();
 }
 
 async function refreshCloudWorkspace() {
-  if (!cloudSyncReady || cloudConflictActive || queuedCloudWrites > 0 || sessionDialog.open) return;
+  if (!cloudSyncReady || cloudConflictActive || syncInProgress || sessionDialog.open) return;
+  if (await readDatabaseRecord(PENDING_CLOUD_STATE_ID)) { await syncPendingChanges(); return; }
   try {
     const remote = await window.DanismaCloudStore.fetchWorkspace();
     if (!remote || remote.version <= cloudVersion) return;
@@ -1029,8 +1046,9 @@ loginForm.addEventListener('submit', submitLogin);
 document.querySelector('#keepLocalCopyButton').addEventListener('click', () => resolveCloudConflict(true));
 document.querySelector('#useCloudCopyButton').addEventListener('click', () => resolveCloudConflict(false));
 window.addEventListener('focus', refreshCloudWorkspace);
-window.addEventListener('online', refreshCloudWorkspace);
-window.setInterval(refreshCloudWorkspace, 45_000);
+window.addEventListener('online', () => { syncPendingChanges(); refreshCloudWorkspace(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { syncPendingChanges(); refreshCloudWorkspace(); } });
+window.setInterval(() => { syncPendingChanges(); refreshCloudWorkspace(); }, 15000);
 
 calendarGrid.addEventListener('click', (event) => {
   const dayButton = event.target.closest('[data-calendar-date]');
@@ -1187,7 +1205,16 @@ async function initializeApp() {
   try {
     const savedSession = await window.DanismaCloudStore.restoreSession();
     if (savedSession) {
-      await loadCloudWorkspace();
+      // Show the locally stored workspace immediately, even while offline.
+      showApp();
+      render();
+      try {
+        await loadCloudWorkspace();
+      } catch (error) {
+        console.warn('Bulut şu anda erişilemiyor; cihazdaki veriler gösteriliyor:', error);
+        cloudSyncReady = false;
+        scheduleCloudReconnect();
+      }
     } else {
       showLogin(window.DanismaCloudStore.isConfigured()
         ? ''
